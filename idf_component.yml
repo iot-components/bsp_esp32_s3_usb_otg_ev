@@ -11,12 +11,6 @@ dependencies:
   bus:
     git: https://github.com/iot-components/bus.git
     public: true
-  display_screen:
-    git: https://github.com/iot-components/display_screen.git
-    public: true
   button:
     git: https://github.com/iot-components/button.git
-    public: true
-  led_indicator:
-    git: https://github.com/iot-components/led_indicator.git
     public: true
