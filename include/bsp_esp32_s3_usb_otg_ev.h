@@ -286,6 +286,14 @@ esp_err_t iot_board_led_all_set_state(bool turn_on);
  */
 esp_err_t iot_board_led_toggle_state(int gpio_num);
 
+static inline void _usb_otg_router_to_internal_phy()
+{
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+    uint32_t *usb_phy_sel_reg = (uint32_t *)(0x60008000 + 0x120);
+    *usb_phy_sel_reg |= BIT(19) | BIT(20);
+#endif
+}
+
 #ifdef __cplusplus
 }
 #endif
