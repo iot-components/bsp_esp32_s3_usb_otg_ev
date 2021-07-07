@@ -19,6 +19,7 @@
 #include "esp_log.h"
 #include "i2c_bus.h"
 #include "spi_bus.h"
+#include "bsp_wifi.h"
 #include "bsp_esp32_s3_usb_otg_ev.h"
 
 static const char *TAG = "Board";
@@ -121,6 +122,7 @@ static esp_err_t board_spi_bus_init(void)
         .miso_io_num = BOARD_IO_SPI2_MISO,
         .mosi_io_num = BOARD_IO_SPI2_MOSI,
         .sclk_io_num = BOARD_IO_SPI2_SCK,
+        .max_transfer_sz = BOARD_LCD_WIDTH * BOARD_LCD_HEIGHT * 2+64,
     };
     s_spi2_bus_handle = spi_bus_create(SPI2_HOST, &bus2_conf);
     BOARD_CHECK(s_spi2_bus_handle != NULL, "spi_bus2 creat failed", ESP_FAIL);
@@ -254,6 +256,10 @@ esp_err_t iot_board_init(void)
     if(s_board_is_init) {
         return ESP_OK;
     }
+
+#ifdef CONFIG_BOARD_WIFI_INIT
+    app_wifi_main();
+#endif
 
     esp_err_t ret = board_gpio_init();
     BOARD_CHECK(ret == ESP_OK, "gpio init failed", ret);
