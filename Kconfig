@@ -2,7 +2,7 @@ menu "BSP esp32_s3_usb_otg_rv Options"
 
     config BOARD_WIFI_INIT
         bool "init wifi during board init"
-        default y
+        default n
         help
             if enable, wifi will be initialized with default configuration during board init,
             then, you can use iot_board_get_handle to get the net interface.
