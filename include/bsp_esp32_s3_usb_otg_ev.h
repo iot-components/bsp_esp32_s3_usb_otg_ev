@@ -56,24 +56,33 @@ typedef void* board_res_handle_t;
 #define BOARD_MCU_RAM_SIZE "512KB"
 #define BOARD_MCU_RAM_USER_SIZE "384KB"
 
+/* Free pins */
+#define BOARD_IO_FREE_1 45
+#define BOARD_IO_FREE_2 46
+#define BOARD_IO_FREE_3 38
+#define BOARD_IO_FREE_4 26
+#define BOARD_IO_FREE_5 47
+#define BOARD_IO_FREE_6 3
+
 /*Definations of Button*/
 #define BOARD_IO_BUTTON_OK 0
-#define BOARD_IO_BUTTON_DW 1
-#define BOARD_IO_BUTTON_UP 2
-#define BOARD_IO_BUTTON_MENU 3
+#define BOARD_IO_BUTTON_DW 11
+#define BOARD_IO_BUTTON_UP 10
+#define BOARD_IO_BUTTON_MENU 14
 
 #define BOARD_IO_LED_GREEN 15
-#define BOARD_IO_LED_RED 16
+#define BOARD_IO_LED_YELLOW 16
 
 #define BOARD_IO_USB_DP 20
 #define BOARD_IO_USB_DN 19
 
-#define BOARD_IO_I2C0_SCL 37
-#define BOARD_IO_I2C0_SDA 38
+#define BOARD_IO_I2C0_SCL BOARD_IO_FREE_3
+#define BOARD_IO_I2C0_SDA BOARD_IO_FREE_4
 
-#define BOARD_IO_SPI3_SCK 33
+#define BOARD_IO_SPI3_SCK 36
 #define BOARD_IO_SPI3_MOSI 35
-#define BOARD_IO_SPI3_MISO 34
+#define BOARD_IO_SPI3_MISO 37
+#define BOARD_IO_SPI3_CS 34
 
 #define BOARD_IO_SPI2_SCK 6
 #define BOARD_IO_SPI2_MOSI 7
@@ -84,15 +93,22 @@ typedef void* board_res_handle_t;
 #define BOARD_IO_JTAG_MTDO 40
 #define BOARD_IO_JTAG_MTCK 39
 
-#define BOARD_IO_ADC_HOST_VOL 10
-#define BOARD_IO_ADC_BAT_VOL 11
-#define BOARD_ADC_HOST_VOL_CHAN 9 //ADC1
-#define BOARD_ADC_BAT_VOL_CHAN 0 //ADC2
+#define BOARD_IO_ADC_HOST_VOL 1
+#define BOARD_IO_ADC_BAT_VOL 2
+
+#ifdef CONFIG_IDF_TARGET_ESP32S2
+#define BOARD_ADC_HOST_VOL_CHAN 0 //ADC1
+#define BOARD_ADC_BAT_VOL_CHAN 1 //ADC2
+#elif CONFIG_IDF_TARGET_ESP32S3
+#define BOARD_ADC_HOST_VOL_CHAN 0//ADC1 CH0
+#define BOARD_ADC_BAT_VOL_CHAN 1 //ADC1 CH1
+#else
+#error target not supported
+#endif
 
 /* Power Selector */
 #define BOARD_IO_HOST_BOOST_EN 13
 #define BOARD_IO_DEV_VBUS_EN 12
-#define BOARD_IO_CHRG 14
 #define BOARD_IO_USB_SEL 18
 #define BOARD_IO_IDEV_LIMIT_EN 17
 
@@ -104,7 +120,7 @@ typedef void* board_res_handle_t;
 
 #define BOARD_LED_NUM 2
 #define BOARD_IO_LED_1 BOARD_IO_LED_GREEN
-#define BOARD_IO_LED_2 BOARD_IO_LED_RED
+#define BOARD_IO_LED_2 BOARD_IO_LED_YELLOW
 #define BOARD_LED_POLARITY_1 _POSITIVE
 #define BOARD_LED_POLARITY_2 _POSITIVE
 
@@ -121,9 +137,19 @@ typedef void* board_res_handle_t;
 #define BOARD_LCD_WIDTH 240
 #define BOARD_LCD_HEIGHT 240
 
+/* spisd mode */
 #define BOARD_SDCARD_CMD BOARD_IO_SPI3_MOSI
 #define BOARD_SDCARD_CLK BOARD_IO_SPI3_SCK
 #define BOARD_SDCARD_DATA BOARD_IO_SPI3_MISO
+#define BOARD_SDCARD_CD BOARD_IO_SPI3_CS
+
+/* sdio mode */
+#define BOARD_SDCARD_SDIO_CMD BOARD_IO_SPI3_MOSI
+#define BOARD_SDCARD_SDIO_CLK BOARD_IO_SPI3_SCK
+#define BOARD_SDCARD_SDIO_DATA0 37
+#define BOARD_SDCARD_SDIO_DATA1 38
+#define BOARD_SDCARD_SDIO_DATA2 33
+#define BOARD_SDCARD_SDIO_DATA3 34
 
 #define BOARD_IO_PIN_SEL_OUTPUT ((1ULL<<BOARD_IO_LED_1)\
                                 |(1ULL<<BOARD_IO_LED_2)\
@@ -135,8 +161,7 @@ typedef void* board_res_handle_t;
 #define BOARD_IO_PIN_SEL_INPUT ((1ULL<<BOARD_IO_BUTTON_OK)\
                                 |(1ULL<<BOARD_IO_BUTTON_DW)\
                                 |(1ULL<<BOARD_IO_BUTTON_UP)\
-                                |(1ULL<<BOARD_IO_BUTTON_MENU)\
-                                |(1ULL<<BOARD_IO_CHRG))
+                                |(1ULL<<BOARD_IO_BUTTON_MENU))
 
 typedef enum {
     USB_DEVICE_MODE,

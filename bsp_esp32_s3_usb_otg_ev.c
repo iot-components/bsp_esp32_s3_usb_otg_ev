@@ -28,7 +28,6 @@ static const char *TAG = "Board";
 #define NO_OF_SAMPLES   16          //Multisampling
 
 static esp_adc_cal_characteristics_t *adc1_chars = NULL;
-static esp_adc_cal_characteristics_t *adc2_chars = NULL;
 
 #if CONFIG_IDF_TARGET_ESP32S2
 static const adc_bits_width_t BOARD_ADC_WIDTH = ADC_WIDTH_BIT_13;
@@ -201,16 +200,11 @@ static esp_err_t board_adc_init(void)
     adc1_config_width(BOARD_ADC_WIDTH);
     adc1_config_channel_atten(BOARD_ADC_HOST_VOL_CHAN, BOARD_ADC_ATTEN);
 
-    adc2_config_channel_atten((adc2_channel_t)BOARD_ADC_BAT_VOL_CHAN, BOARD_ADC_ATTEN);
-
     //Characterize ADC
     adc1_chars = calloc(1, sizeof(esp_adc_cal_characteristics_t));
     esp_adc_cal_value_t val_type = esp_adc_cal_characterize(BOARD_ADC_UNIT, BOARD_ADC_ATTEN, BOARD_ADC_WIDTH, DEFAULT_VREF, adc1_chars);
     _print_char_val_type(val_type);
 
-    adc2_chars = calloc(1, sizeof(esp_adc_cal_characteristics_t));
-    val_type = esp_adc_cal_characterize(ADC_UNIT_2, BOARD_ADC_ATTEN, BOARD_ADC_WIDTH, DEFAULT_VREF, adc2_chars);
-    _print_char_val_type(val_type);
     return ESP_OK;
 }
 
@@ -250,12 +244,25 @@ static esp_err_t board_button_deinit()
     return ESP_OK;//TODO:
 }
 
+#if CONFIG_IDF_TARGET_ESP32S3
+static void usb_otg_router_to_internal_phy()
+{
+    uint32_t *usb_phy_sel_reg = (uint32_t *)(0x60008000 + 0x120);
+    *usb_phy_sel_reg |= BIT(19) | BIT(20);
+}
+#endif
+
 /****General board level API ****/
 esp_err_t iot_board_init(void)
 {
     if(s_board_is_init) {
         return ESP_OK;
     }
+
+#if CONFIG_IDF_TARGET_ESP32S3
+    /* router USB PHY from USB-JTAG-Serial to USB OTG */
+    usb_otg_router_to_internal_phy();
+#endif
 
 #ifdef CONFIG_BOARD_WIFI_INIT
     app_wifi_main();
@@ -399,17 +406,15 @@ float iot_board_get_host_voltage(void)
 
 float iot_board_get_battery_voltage(void)
 {
-    BOARD_CHECK(adc2_chars != NULL, "ADC not inited", 0.0);
+    BOARD_CHECK(adc1_chars != NULL, "ADC not inited", 0.0);
     uint32_t adc_reading = 0;
     //Multisampling
     for (int i = 0; i < NO_OF_SAMPLES; i++) {
-        int raw;
-        adc2_get_raw((adc2_channel_t)BOARD_ADC_BAT_VOL_CHAN, BOARD_ADC_WIDTH, &raw);
-        adc_reading += raw;
+        adc_reading += adc1_get_raw((adc1_channel_t)BOARD_ADC_HOST_VOL_CHAN);
     }
     adc_reading /= NO_OF_SAMPLES;
     //Convert adc_reading to voltage in mV
-    uint32_t voltage = esp_adc_cal_raw_to_voltage(adc_reading, adc2_chars);
+    uint32_t voltage = esp_adc_cal_raw_to_voltage(adc_reading, adc1_chars);
     return voltage * 200.0 / 100.0 / 1000.0;
 }
 
