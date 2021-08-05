@@ -59,7 +59,7 @@ typedef void* board_res_handle_t;
 /* Free pins */
 #define BOARD_IO_FREE_1 45
 #define BOARD_IO_FREE_2 46
-#define BOARD_IO_FREE_3 38
+#define BOARD_IO_FREE_3 48
 #define BOARD_IO_FREE_4 26
 #define BOARD_IO_FREE_5 47
 #define BOARD_IO_FREE_6 3
