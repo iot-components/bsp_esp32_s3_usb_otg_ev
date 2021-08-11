@@ -12,20 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef _BSP_ESP32_S3_USB_OTG_EV_H_
-#define _BSP_ESP32_S3_USB_OTG_EV_H_
+#ifndef _IOT_BOARD_H_
+#define _IOT_BOARD_H_
 
 #include "stdio.h"
 #include "stdbool.h"
 #include "esp_err.h"
+#include "board_common.h"
 #include "iot_button.h"
-
-/*ENABLE Initialization Process in iot_board_init(void)*/
-#define _ENABLE 1
-#define _DISABLE 0
-#define _UNDEFINE
-#define _POSITIVE 1
-#define _NEGATIVE 0
 
 /**
  * Resource ID on Board,
@@ -42,15 +36,13 @@ typedef enum {
     BOARD_BTN_MN_ID,
 }board_res_id_t;
 
-typedef void* board_res_handle_t;
-
 /*Definations of Board*/
 #define BOARD_NAME "ESP32_S3_USB_OTG_EV"
 #define BOARD_VENDOR "Espressif"
 #define BOARD_URL "https://github.com/espressif/esp-iot-solution/blob/master"
 
 /*Definations of MCU*/
-#define BOARD_MCU_NAME "ESP32-S3"
+#define BOARD_MCU_NAME "ESP32S3"
 #define BOARD_MODULE_NAME "ESP32-S3-MINI"
 #define BOARD_MCU_FLASH_SIZE "4MB"
 #define BOARD_MCU_RAM_SIZE "512KB"
@@ -69,6 +61,10 @@ typedef void* board_res_handle_t;
 #define BOARD_IO_BUTTON_DW 11
 #define BOARD_IO_BUTTON_UP 10
 #define BOARD_IO_BUTTON_MENU 14
+
+#define BOARD_IO_BUTTON_A BOARD_IO_BUTTON_DW
+#define BOARD_IO_BUTTON_B BOARD_IO_BUTTON_UP
+#define BOARD_IO_BUTTON_C BOARD_IO_BUTTON_MENU
 
 #define BOARD_IO_LED_GREEN 15
 #define BOARD_IO_LED_YELLOW 16
@@ -172,47 +168,6 @@ typedef enum {
 extern "C"
 {
 #endif
-
-/**
- * @brief Board level init.
- *        Peripherals can be chosen through menuconfig, which will be initialized with default configurations during iot_board_init.
- *        After board init, initialized peripherals can be referenced by handles directly.
- * 
- * @return esp_err_t 
- */
-esp_err_t iot_board_init(void);
-
-/**
- * @brief Board level deinit.
- *        After board deinit, initialized peripherals will be deinit and related handles will be set to NULL.
- * 
- * @return esp_err_t 
- */
-esp_err_t iot_board_deinit(void);
-
-/**
- * @brief Check if board is initialized 
- * 
- * @return true if board is initialized
- * @return false if board is not initialized
- */
-bool iot_board_is_init(void);
-
-/**
- * @brief Using resource's ID declared in board_res_id_t to get board level resource's handle
- * 
- * @param id Resource's ID declared in board_res_id_t
- * @return board_res_handle_t Resource's handle
- * if no related handle,NULL will be returned
- */
-board_res_handle_t iot_board_get_handle(board_res_id_t id);
-
-/**
- * @brief Get board information
- * 
- * @return String include BOARD_NAME etc. 
- */
-char* iot_board_get_info();
 
 /*********************************** Extended board level API ***********************/
 /**
@@ -323,4 +278,4 @@ static inline void _usb_otg_router_to_internal_phy()
 }
 #endif
 
-#endif /* _BSP_ESP32_S3_USB_OTG_EV_H_ */
+#endif /* _IOT_BOARD_H_ */

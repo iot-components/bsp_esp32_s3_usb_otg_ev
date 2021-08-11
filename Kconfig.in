@@ -1,4 +1,4 @@
-menu "BSP esp32_s3_usb_otg_rv Options"
+if BOARD_ESP32S3_USB_OTG_EV
 
     config BOARD_WIFI_INIT
         bool "init wifi during board init"
@@ -78,4 +78,4 @@ menu "BSP esp32_s3_usb_otg_rv Options"
             Set the Maximum retry to avoid station reconnecting to the AP unlimited when the AP is really inexistent.
     endmenu
 
-endmenu
+endif
