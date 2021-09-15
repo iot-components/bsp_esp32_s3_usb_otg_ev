@@ -19,6 +19,7 @@
 #include "stdbool.h"
 #include "esp_err.h"
 #include "iot_button.h"
+#include "screen_driver.h"
 
 /*ENABLE Initialization Process in iot_board_init(void)*/
 #define _ENABLE 1
@@ -36,6 +37,8 @@ typedef enum {
     BOARD_I2C0_ID,
     BOARD_SPI2_ID,
     BOARD_SPI3_ID,
+    BOARD_LCD_ID,
+    BOARD_SDCARD_ID,
     BOARD_BTN_OK_ID,
     BOARD_BTN_UP_ID,
     BOARD_BTN_DW_ID,
@@ -95,6 +98,7 @@ typedef void* board_res_handle_t;
 
 #define BOARD_IO_ADC_HOST_VOL 1
 #define BOARD_IO_ADC_BAT_VOL 2
+#define BOARD_IO_0VER_CURRENT 21
 
 #ifdef CONFIG_IDF_TARGET_ESP32S2
 #define BOARD_ADC_HOST_VOL_CHAN 0 //ADC1
@@ -137,15 +141,21 @@ typedef void* board_res_handle_t;
 #define BOARD_LCD_WIDTH 240
 #define BOARD_LCD_HEIGHT 240
 
+/* SD Card */
+#define BOARD_SDCARD_BASE_PATH "/sdcard"
+#define BOARD_SDCARD_FORMAT_IF_MOUNT_FAILED 1
+#define BOARD_SDCARD_MAX_OPENED_FILE 5
+#define BOARD_SDCARD_DISK_BLOCK_SIZE 512
 /* spisd mode */
+#define BOARD_SDCARD_SPI_HOST SPI3_HOST
 #define BOARD_SDCARD_CMD BOARD_IO_SPI3_MOSI
 #define BOARD_SDCARD_CLK BOARD_IO_SPI3_SCK
 #define BOARD_SDCARD_DATA BOARD_IO_SPI3_MISO
 #define BOARD_SDCARD_CD BOARD_IO_SPI3_CS
-
 /* sdio mode */
 #define BOARD_SDCARD_SDIO_CMD BOARD_IO_SPI3_MOSI
 #define BOARD_SDCARD_SDIO_CLK BOARD_IO_SPI3_SCK
+#define BOARD_SDCARD_SDIO_DATA_WIDTH 4
 #define BOARD_SDCARD_SDIO_DATA0 37
 #define BOARD_SDCARD_SDIO_DATA1 38
 #define BOARD_SDCARD_SDIO_DATA2 33
@@ -318,6 +328,19 @@ static inline void _usb_otg_router_to_internal_phy()
     *usb_phy_sel_reg |= BIT(19) | BIT(20);
 #endif
 }
+
+/**
+ * @brief init esp32xx Wi-Fi with configs from menuconfig, deinit currentlly not supported
+ * 
+ * @return esp_err_t 
+ */
+esp_err_t iot_board_wifi_init(void);
+
+/**
+ * @brief 
+ * 
+ */
+esp_err_t board_lcd_draw_image(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t *img);
 
 #ifdef __cplusplus
 }

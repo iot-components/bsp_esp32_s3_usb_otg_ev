@@ -15,28 +15,47 @@
 #include <stdio.h>
 #include "driver/gpio.h"
 #include "driver/adc.h"
+#ifdef CONFIG_IDF_TARGET_ESP32S2
 #include "esp_adc_cal.h"
+#endif
 #include "esp_log.h"
 #include "i2c_bus.h"
 #include "spi_bus.h"
-#include "bsp_wifi.h"
 #include "bsp_esp32_s3_usb_otg_ev.h"
+#include "esp_vfs.h"
+#include "esp_vfs_fat.h"
+#include "driver/sdmmc_defs.h"
+#include "driver/sdmmc_types.h"
+#include "sdmmc_cmd.h"
+
+#ifdef SOC_SDMMC_HOST_SUPPORTED
+#include "driver/sdmmc_host.h"
+#else
+#include "driver/spi_common.h"
+#include "driver/sdspi_host.h"
+#endif
+
 
 static const char *TAG = "Board";
 
 #define DEFAULT_VREF    1100        //Use adc2_vref_to_gpio() to obtain a better estimate
 #define NO_OF_SAMPLES   16          //Multisampling
 
+#ifdef CONFIG_IDF_TARGET_ESP32S2
 static esp_adc_cal_characteristics_t *adc1_chars = NULL;
-
-#if CONFIG_IDF_TARGET_ESP32S2
-static const adc_bits_width_t BOARD_ADC_WIDTH = ADC_WIDTH_BIT_13;
-#endif
-static const adc_atten_t BOARD_ADC_ATTEN = ADC_ATTEN_DB_11;
 static const adc_unit_t BOARD_ADC_UNIT = ADC_UNIT_1;
+static const adc_bits_width_t BOARD_ADC_WIDTH = ADC_WIDTH_BIT_13;
+#else
+static const adc_bits_width_t BOARD_ADC_WIDTH = ADC_WIDTH_BIT_12;
+#endif
+
+static const adc_atten_t BOARD_ADC_ATTEN = ADC_ATTEN_DB_11;
 
 static bool s_board_is_init = false;
 static bool s_board_gpio_isinit = false;
+static bool s_board_adc_isinit = false;
+static bool s_board_lcd_isinit = false;
+static bool s_board_sdcard_isinit = false;
 
 #define BOARD_CHECK(a, str, ret) if(!(a)) { \
         ESP_LOGE(TAG,"%s:%d (%s):%s", __FILE__, __LINE__, __FUNCTION__, str); \
@@ -51,18 +70,19 @@ static button_handle_t s_btn_ok_hdl = NULL;
 static button_handle_t s_btn_up_hdl = NULL;
 static button_handle_t s_btn_dw_hdl = NULL;
 static button_handle_t s_btn_menu_hdl = NULL;
+static board_res_handle_t s_lcd_handle = NULL;
+static board_res_handle_t s_sdcard_handle = NULL;
+static scr_driver_t s_lcd;
+static sdmmc_card_t *s_sdcard;
 
+#if CONFIG_IDF_TARGET_ESP32S2
 static void _check_efuse(void)
 {
-#if CONFIG_IDF_TARGET_ESP32S2
     if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_TP) == ESP_OK) {
         printf("eFuse Two Point: Supported\n");
     } else {
         printf("Cannot retrieve eFuse Two Point calibration values. Default calibration values will be used.\n");
     }
-#else
-#error "This example is configured for ESP32S2."
-#endif
 }
 
 static void _print_char_val_type(esp_adc_cal_value_t val_type)
@@ -75,6 +95,7 @@ static void _print_char_val_type(esp_adc_cal_value_t val_type)
         printf("Characterized using Default Vref\n");
     }
 }
+#endif
 
 static esp_err_t board_i2c_bus_init(void)
 {
@@ -192,19 +213,20 @@ static esp_err_t board_gpio_deinit(void)
 
 static esp_err_t board_adc_init(void)
 {
-    //Check if Two Point or Vref are burned into eFuse
-    _check_efuse();
-
     //Configure ADC
-
     adc1_config_width(BOARD_ADC_WIDTH);
     adc1_config_channel_atten(BOARD_ADC_HOST_VOL_CHAN, BOARD_ADC_ATTEN);
 
+#ifdef CONFIG_IDF_TARGET_ESP32S2
+    //Check if Two Point or Vref are burned into eFuse
+    _check_efuse();
     //Characterize ADC
     adc1_chars = calloc(1, sizeof(esp_adc_cal_characteristics_t));
     esp_adc_cal_value_t val_type = esp_adc_cal_characterize(BOARD_ADC_UNIT, BOARD_ADC_ATTEN, BOARD_ADC_WIDTH, DEFAULT_VREF, adc1_chars);
     _print_char_val_type(val_type);
+#endif
 
+    s_board_adc_isinit = true;
     return ESP_OK;
 }
 
@@ -244,6 +266,141 @@ static esp_err_t board_button_deinit()
     return ESP_OK;//TODO:
 }
 
+static void lcd_screen_clear(scr_driver_t *lcd, int color)
+{
+    scr_info_t lcd_info;
+    lcd->get_info(&lcd_info);
+    uint16_t *buffer = malloc(lcd_info.width * sizeof(uint16_t));
+
+    if (NULL == buffer) {
+        for (size_t y = 0; y < lcd_info.height; y++) {
+            for (size_t x = 0; x < lcd_info.width; x++) {
+                lcd->draw_pixel(x, y, color);
+            }
+        }
+    } else {
+        for (size_t i = 0; i < lcd_info.width; i++) {
+            buffer[i] = color;
+        }
+
+        for (int y = 0; y < lcd_info.height; y++) {
+            lcd->draw_bitmap(0, y, lcd_info.width, 1, buffer);
+        }
+
+        free(buffer);
+    }
+}
+
+static esp_err_t board_lcd_init(void)
+{
+#ifdef CONFIG_BOARD_LCD_INIT
+    BOARD_CHECK(s_board_lcd_isinit != true, "lcd has inited", ESP_OK);
+    spi_bus_handle_t spi_bus = iot_board_get_handle(BOARD_SPI2_ID);
+    BOARD_CHECK(spi_bus != NULL, "spi_bus2 not created", ESP_ERR_INVALID_STATE);
+
+    scr_interface_spi_config_t spi_lcd_cfg = {
+        .spi_bus = spi_bus,
+        .pin_num_cs = BOARD_LCD_SPI_CS_PIN,
+        .pin_num_dc = BOARD_LCD_SPI_DC_PIN,
+        .clk_freq = BOARD_LCD_SPI_CLOCK_FREQ,
+        .swap_data = true,
+    };
+
+    scr_interface_driver_t *iface_drv;
+    scr_interface_create(SCREEN_IFACE_SPI, &spi_lcd_cfg, &iface_drv);
+    esp_err_t ret = scr_find_driver(BOARD_LCD_TYPE, &s_lcd);
+    BOARD_CHECK(ret == ESP_OK, "screen find failed", ESP_ERR_NOT_SUPPORTED);
+
+    scr_controller_config_t lcd_cfg = {
+        .interface_drv = iface_drv,
+        .pin_num_rst = BOARD_LCD_SPI_RESET_PIN,
+        .pin_num_bckl = BOARD_LCD_SPI_BL_PIN,
+        .rst_active_level = 0,
+        .bckl_active_level = 1,
+        .offset_hor = 0,
+        .offset_ver = 0,
+        .width = BOARD_LCD_WIDTH,
+        .height = BOARD_LCD_HEIGHT,
+        .rotate = SCR_DIR_LRTB,
+    };
+
+    ret = s_lcd.init(&lcd_cfg);
+    BOARD_CHECK(ret == ESP_OK, "screen initialize failed", ESP_FAIL);
+    lcd_screen_clear(&s_lcd, COLOR_BLACK);
+    s_lcd_handle = (board_res_handle_t)&s_lcd;
+    s_board_lcd_isinit = true;
+#endif
+    return ESP_OK;
+}
+
+static esp_err_t board_sdcard_init(void)
+{
+#ifdef CONFIG_BOARD_SD_CARD_INIT
+    BOARD_CHECK(s_board_sdcard_isinit != true, "sdcard has inited", ESP_OK);
+    esp_vfs_fat_sdmmc_mount_config_t mount_config = {
+        .format_if_mount_failed = BOARD_SDCARD_FORMAT_IF_MOUNT_FAILED,
+        .max_files = BOARD_SDCARD_MAX_OPENED_FILE,
+        .allocation_unit_size = BOARD_SDCARD_DISK_BLOCK_SIZE
+    };
+    esp_err_t ret = ESP_OK;
+#ifdef SOC_SDMMC_HOST_SUPPORTED
+    ESP_LOGI(TAG, "Using SDIO Interface");
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
+
+    // This initializes the slot without card detect (CD) and write protect (WP) signals.
+    // Modify slot_config.gpio_cd and slot_config.gpio_wp if your board has these signals.
+    sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+    slot_config.clk = BOARD_SDCARD_SDIO_CLK;
+    slot_config.cmd = BOARD_SDCARD_SDIO_CMD;
+    slot_config.d0 = BOARD_SDCARD_SDIO_DATA0;
+    slot_config.d1 = BOARD_SDCARD_SDIO_DATA1;
+    slot_config.d2 = BOARD_SDCARD_SDIO_DATA2;
+    slot_config.d3 = BOARD_SDCARD_SDIO_DATA3;
+    // To use 1-line SD mode, change this to 1:
+    slot_config.width = BOARD_SDCARD_SDIO_DATA_WIDTH;
+    // Enable internal pullups on enabled pins. The internal pullups
+    // are insufficient however, please make sure 10k external pullups are
+    // connected on the bus. This is for debug / example purpose only.
+    //slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+
+    ret = esp_vfs_fat_sdmmc_mount(BOARD_SDCARD_BASE_PATH, &host, &slot_config, &mount_config, &s_sdcard);
+#else
+    ESP_LOGI(TAG, "Using SPI Interface");
+    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+    host.slot = BOARD_SDCARD_SPI_HOST;
+    sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
+    slot_config.gpio_cs = BOARD_SDCARD_CD;
+    slot_config.host_id = host.slot;
+    ret = esp_vfs_fat_sdspi_mount(BOARD_SDCARD_BASE_PATH, &host, &slot_config, &mount_config, &s_sdcard);
+#endif
+
+    if (ret != ESP_OK) {
+        if (ret == ESP_FAIL) {
+            ESP_LOGE(TAG, "Failed to mount filesystem. "
+                     "If you want the card to be formatted, set the EXAMPLE_FORMAT_IF_MOUNT_FAILED menuconfig option.");
+        } else {
+            ESP_LOGE(TAG, "Failed to initialize the card (%s). "
+                     "Make sure SD card lines have pull-up resistors in place.", esp_err_to_name(ret));
+        }
+        return ret;
+    }
+
+    // Card has been initialized, print its properties
+    sdmmc_card_print_info(stdout, s_sdcard);
+    s_sdcard_handle = s_sdcard;
+    s_board_sdcard_isinit = true;
+#endif
+    return ESP_OK;
+}
+
+esp_err_t board_lcd_draw_image(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t *img)
+{
+    BOARD_CHECK(s_board_lcd_isinit == true, "lcd not inited", ESP_ERR_INVALID_STATE);
+    BOARD_CHECK(NULL != img, "Image pointer invalid", ESP_ERR_INVALID_ARG);
+    return s_lcd.draw_bitmap(x, y, width, height, img);
+}
+
 #if CONFIG_IDF_TARGET_ESP32S3
 static void usb_otg_router_to_internal_phy()
 {
@@ -255,17 +412,11 @@ static void usb_otg_router_to_internal_phy()
 /****General board level API ****/
 esp_err_t iot_board_init(void)
 {
-    if(s_board_is_init) {
-        return ESP_OK;
-    }
+    BOARD_CHECK(s_board_is_init != true, "board has inited", ESP_OK);
 
 #if CONFIG_IDF_TARGET_ESP32S3
     /* router USB PHY from USB-JTAG-Serial to USB OTG */
     usb_otg_router_to_internal_phy();
-#endif
-
-#ifdef CONFIG_BOARD_WIFI_INIT
-    app_wifi_main();
 #endif
 
     esp_err_t ret = board_gpio_init();
@@ -285,6 +436,13 @@ esp_err_t iot_board_init(void)
     ret = board_spi_bus_init();
     BOARD_CHECK(ret == ESP_OK, "spi init failed", ret);
 
+    ret = board_lcd_init();
+    BOARD_CHECK(ret == ESP_OK, "lcd init failed", ret);
+
+    ret = board_sdcard_init();
+    if (ret != ESP_OK){
+        ESP_LOGW(TAG, "No sdcard found, or sdcard init failed");
+    };
     s_board_is_init = true;
     ESP_LOGI(TAG,"Board Info: %s", iot_board_get_info());
     ESP_LOGI(TAG,"Board Init Done ...");
@@ -293,9 +451,7 @@ esp_err_t iot_board_init(void)
 
 esp_err_t iot_board_deinit(void)
 {
-    if(!s_board_is_init) {
-        return ESP_OK;
-    }
+    BOARD_CHECK(s_board_is_init == true, "board not inited", ESP_OK);
 
     esp_err_t ret = board_gpio_deinit();
     BOARD_CHECK(ret == ESP_OK, "gpio de-init failed", ret);
@@ -338,6 +494,12 @@ board_res_handle_t iot_board_get_handle(board_res_id_t id)
     case BOARD_SPI3_ID:
         handle = (board_res_handle_t)s_spi3_bus_handle;
         break;
+    case BOARD_LCD_ID:
+        handle = (board_res_handle_t)s_lcd_handle;
+        break;
+    case BOARD_SDCARD_ID:
+        handle = (board_res_handle_t)s_sdcard_handle;
+        break;
     case BOARD_BTN_OK_ID:
         handle = (board_res_handle_t)s_btn_ok_hdl;
         break;
@@ -366,9 +528,7 @@ char* iot_board_get_info()
 /****Extended board level API ****/
 esp_err_t iot_board_usb_device_set_power(bool on_off, bool from_battery)
 {
-    if (!s_board_gpio_isinit) {
-        return ESP_FAIL;
-    }
+    BOARD_CHECK(s_board_is_init == true, "board not inited", ESP_FAIL);
 
     if (from_battery) {
         gpio_set_level(BOARD_IO_HOST_BOOST_EN, on_off); //BOOST_EN
@@ -392,30 +552,34 @@ bool iot_board_usb_device_get_power(void)
 
 float iot_board_get_host_voltage(void)
 {
-    BOARD_CHECK(adc1_chars != NULL, "ADC not inited", 0.0);
+    BOARD_CHECK(s_board_adc_isinit == true, "ADC not inited", 0.0);
     uint32_t adc_reading = 0;
     //Multisampling
     for (int i = 0; i < NO_OF_SAMPLES; i++) {
         adc_reading += adc1_get_raw((adc1_channel_t)BOARD_ADC_HOST_VOL_CHAN);
     }
     adc_reading /= NO_OF_SAMPLES;
+#ifdef CONFIG_IDF_TARGET_ESP32S2
     //Convert adc_reading to voltage in mV
-    uint32_t voltage = esp_adc_cal_raw_to_voltage(adc_reading, adc1_chars);
-    return voltage * 370.0 / 100.0 / 1000.0;
+    adc_reading = esp_adc_cal_raw_to_voltage(adc_reading, adc1_chars);
+#endif
+    return adc_reading * 370.0 / 100.0 / 1000.0;
 }
 
 float iot_board_get_battery_voltage(void)
 {
-    BOARD_CHECK(adc1_chars != NULL, "ADC not inited", 0.0);
+    BOARD_CHECK(s_board_adc_isinit == true, "ADC not inited", 0.0);
     uint32_t adc_reading = 0;
     //Multisampling
     for (int i = 0; i < NO_OF_SAMPLES; i++) {
         adc_reading += adc1_get_raw((adc1_channel_t)BOARD_ADC_HOST_VOL_CHAN);
     }
     adc_reading /= NO_OF_SAMPLES;
+#ifdef CONFIG_IDF_TARGET_ESP32S2
     //Convert adc_reading to voltage in mV
-    uint32_t voltage = esp_adc_cal_raw_to_voltage(adc_reading, adc1_chars);
-    return voltage * 200.0 / 100.0 / 1000.0;
+    adc_reading = esp_adc_cal_raw_to_voltage(adc_reading, adc1_chars);
+#endif
+    return adc_reading * 200.0 / 100.0 / 1000.0;
 }
 
 esp_err_t iot_board_button_register_cb(board_res_handle_t btn_handle, button_event_t event, button_cb_t cb)
@@ -432,10 +596,7 @@ esp_err_t iot_board_button_unregister_cb(board_res_handle_t btn_handle, button_e
 
 esp_err_t iot_board_usb_set_mode(usb_mode_t mode)
 {
-    if (!s_board_gpio_isinit) {
-        return ESP_FAIL;
-    }
-
+    BOARD_CHECK(s_board_is_init == true, "board not inited", ESP_FAIL);
     switch (mode)
     {
         case USB_DEVICE_MODE:
