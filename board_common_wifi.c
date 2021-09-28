@@ -113,7 +113,9 @@ static void wifi_init_softap(esp_netif_t *wifi_netif)
 
     wifi_config_t wifi_config;
     memset(&wifi_config, 0, sizeof(wifi_config_t));
-    snprintf((char *)wifi_config.ap.ssid, 32, "%s", BOARD_WIFI_AP_SSID);
+    uint8_t derived_mac_addr[6] = {0};
+    esp_read_mac(derived_mac_addr, ESP_MAC_WIFI_SOFTAP);
+    snprintf((char *)wifi_config.ap.ssid, 32, "%s_%02X%02X%02X", BOARD_WIFI_AP_SSID, derived_mac_addr[3], derived_mac_addr[4], derived_mac_addr[5]);
     wifi_config.ap.ssid_len = strlen((char *)wifi_config.ap.ssid);
     snprintf((char *)wifi_config.ap.password, 64, "%s", BOARD_WIFI_AP_PASS);
     wifi_config.ap.max_connection = BOARD_MAX_STA_CONN;

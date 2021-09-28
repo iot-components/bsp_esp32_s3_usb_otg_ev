@@ -346,7 +346,7 @@ static esp_err_t board_sdcard_init(void)
 #ifdef SOC_SDMMC_HOST_SUPPORTED
     ESP_LOGI(TAG, "Using SDIO Interface");
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
-    host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
+    //host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
 
     // This initializes the slot without card detect (CD) and write protect (WP) signals.
     // Modify slot_config.gpio_cd and slot_config.gpio_wp if your board has these signals.
@@ -416,7 +416,7 @@ esp_err_t iot_board_init(void)
 
 #if CONFIG_IDF_TARGET_ESP32S3
     /* router USB PHY from USB-JTAG-Serial to USB OTG */
-    usb_otg_router_to_internal_phy();
+    //usb_otg_router_to_internal_phy();
 #endif
 
     esp_err_t ret = board_gpio_init();
